@@ -6,6 +6,10 @@ from datetime import datetime, timezone
 
 from confluent_kafka import Producer
 
+from pathlib import Path
+
+from jsonschema import Draft202012Validator, FormatChecker
+
 
 KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
 TOPIC = "vehicle.telemetry"
@@ -131,6 +135,42 @@ def run_simulator():
         producer.flush()
         print("Producer shutdown complete.")
 
+def validate_event(event):
+    errors = sorted(
+        validator.iter_errors(event),
+        key=lambda error: list(error.path),
+    )
+
+    if errors:
+        print(
+            f"Rejected event {event.get('event_id', 'unknown')}:"
+        )
+
+        for error in errors:
+            field = ".".join(str(part) for part in error.path)
+
+            if field:
+                print(f"  {field}: {error.message}")
+            else:
+                print(f"  {error.message}")
+
+        return False
+
+    return True
+
+SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "schemas"
+    / "vehicle_telemetry.schema.json"
+)
+
+with SCHEMA_PATH.open("r", encoding="utf-8") as schema_file:
+    VEHICLE_TELEMETRY_SCHEMA = json.load(schema_file)
+
+validator = Draft202012Validator(
+    VEHICLE_TELEMETRY_SCHEMA,
+    format_checker=FormatChecker(),
+)
 
 if __name__ == "__main__":
     run_simulator()

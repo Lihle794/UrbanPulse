@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: urbanpulse
+Version: 0.1.0
+Summary: Urban mobility data engineering platform for Johannesburg
+Requires-Python: >=3.12
+Requires-Dist: confluent-kafka<3.0,>=2.6

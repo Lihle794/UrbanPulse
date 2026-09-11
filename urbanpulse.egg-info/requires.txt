@@ -1,5 +1,6 @@
 confluent-kafka<3.0,>=2.6
 jsonschema[format]<5.0,>=4.23
+pyspark==4.0.4
 
 [dev]
 pytest<9.0,>=8.0

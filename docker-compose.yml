@@ -8,27 +8,23 @@ services:
       - "9092:9092"
 
     environment:
-      # KRaft configuration
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
 
-      # Listeners
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: >
         CONTROLLER:PLAINTEXT,
         PLAINTEXT:PLAINTEXT
 
-      # Single-node KRaft cluster
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
 
-      # Development-friendly replication settings
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
 
-      # Topic creation will be explicit
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
 
     volumes:
@@ -38,6 +34,7 @@ services:
   minio:
     image: quay.io/minio/minio:latest
     container_name: urbanpulse-minio
+
     command: server /data --console-address ":9001"
 
     ports:
@@ -77,6 +74,73 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+    restart: unless-stopped
+
+
+  airflow:
+    image: urbanpulse-airflow:3.0.6
+    container_name: urbanpulse-airflow
+
+    # Gives the Airflow user access to the host Docker socket.
+    # 989 is the Docker socket GID confirmed on this WSL environment.
+    group_add:
+      - "989"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      AIRFLOW_HOME: /opt/airflow
+
+      # Airflow metadata database.
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+        postgresql+psycopg2://urbanpulse:urbanpulse123@postgres:5432/airflow
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+
+      # UrbanPulse project location inside Airflow.
+      URBANPULSE_PROJECT_ROOT: /opt/urbanpulse
+
+      # MinIO / S3-compatible data lake.
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: urbanpulse
+      MINIO_ROOT_PASSWORD: urbanpulse123
+
+      # UrbanPulse analytical PostgreSQL database.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: urbanpulse
+      POSTGRES_USER: urbanpulse
+      POSTGRES_PASSWORD: urbanpulse123
+
+      # DockerOperator connection to the host Docker daemon.
+      DOCKER_HOST: unix:///var/run/docker.sock
+
+    volumes:
+      # Airflow DAGs.
+      - ./dags:/opt/airflow/dags
+
+      # Persistent Airflow logs.
+      - ./logs/airflow:/opt/airflow/logs
+
+      # Optional Airflow plugins.
+      - ./plugins:/opt/airflow/plugins
+
+      # UrbanPulse source code.
+      - ./:/opt/urbanpulse
+
+      # Allows Airflow DockerOperator to launch Spark containers.
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    command: standalone
 
     restart: unless-stopped
 
